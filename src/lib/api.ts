@@ -55,22 +55,37 @@ export const authApi = {
     api<{ access_token: string; token_type?: string; user?: any }>("/auth/login", {
       method: "POST",
       auth: false,
-      body: JSON.stringify({ email, password }),
+      raw: true,
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ email, password }).toString(),
     }),
   register: (payload: { email: string; password: string; name?: string }) =>
-    api<{ access_token?: string; user?: any }>("/auth/register", {
+    api<{ message: string }>(
+      `/auth/register?email=${encodeURIComponent(payload.email)}&password=${encodeURIComponent(payload.password)}`,
+      {
       method: "POST",
       auth: false,
-      body: JSON.stringify(payload),
-    }),
-  me: () => api<any>("/auth/me"),
+      raw: true,
+      }
+    ),
+  me: async () => {
+    const cached = typeof window === "undefined" ? null : localStorage.getItem("sg_user");
+    return cached ? { user: JSON.parse(cached) } : { user: null };
+  },
 };
 
 export const videosApi = {
   uploadReference: (file: File, meta: { title?: string; description?: string }, onProgress?: (p: number) => void) =>
-    uploadWithProgress("/videos/upload-reference", file, meta, onProgress),
+    uploadWithProgress("/upload", file, meta, onProgress),
   detect: (file: File, meta: { title?: string }, onProgress?: (p: number) => void) =>
-    uploadWithProgress("/videos/detect", file, meta, onProgress),
+    uploadWithProgress("/detect", file, meta, onProgress),
+};
+
+export const watermarkApi = {
+  verify: (file: File, bits?: number, onProgress?: (p: number) => void) =>
+    uploadWithProgress(`/watermark/verify${typeof bits === "number" ? `?bits=${bits}` : ""}`, file, {}, onProgress),
 };
 
 export const detectionsApi = {
@@ -80,7 +95,10 @@ export const detectionsApi = {
       : "";
     return api<any[]>(`/detections${qs}`);
   },
-  get: (id: string) => api<any>(`/detections/${id}`),
+  get: async (id: string) => {
+    const rows = await api<any[]>("/detections");
+    return rows.find((row: any) => String(row?.id) === String(id));
+  },
 };
 
 export const analyticsApi = {
@@ -88,11 +106,15 @@ export const analyticsApi = {
   timeline: () => api<any>("/analytics/timeline"),
   topVideos: () => api<any>("/analytics/top-videos"),
   platforms: () => api<any>("/analytics/platforms"),
+  similarity: () => api<any>("/analytics/similarity"),
 };
 
 export const monitoringApi = {
-  status: () => api<any>("/monitoring/status"),
-  events: () => api<any[]>("/monitoring/events"),
+  status: () => analyticsApi.platforms(),
+  events: async (limit = 50) => {
+    const data = await api<{ events?: any[] }>(`/webhook/events?limit=${limit}`);
+    return data?.events ?? [];
+  },
 };
 
 function uploadWithProgress(

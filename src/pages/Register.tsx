@@ -24,14 +24,6 @@ export default function Register() {
       toast.success("Account created. Welcome to SportGuard.");
       nav("/app");
     } catch (err: any) {
-      if (err?.status === 0) {
-        const { tokenStore } = await import("@/lib/api");
-        tokenStore.set("demo-token");
-        localStorage.setItem("sg_user", JSON.stringify({ email, name }));
-        toast.message("Backend offline — demo session created");
-        window.location.href = "/app";
-        return;
-      }
       toast.error(err?.message || "Registration failed");
     } finally {
       setLoading(false);

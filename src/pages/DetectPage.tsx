@@ -1,6 +1,6 @@
 import { GlassCard } from "@/components/sg/GlassCard";
 import { StatusBadge } from "@/components/sg/StatusBadge";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ScanSearch, FileVideo, X, Loader2, CheckCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { videosApi } from "@/lib/api";
@@ -13,17 +13,14 @@ type Match = {
   score: number;
 };
 
-const demoMatches: Match[] = [
-  { id: "REF-1024", title: "UEFA Champions Final 2025 — Master", platform: "Reference Library", video: 96, audio: 94, watermark: true, status: "VERIFIED_PIRACY", score: 0.96 },
-  { id: "REF-1011", title: "UEFA Final — Promo Edit", platform: "Reference Library", video: 81, audio: 73, watermark: false, status: "PIRATED", score: 0.78 },
-  { id: "REF-0987", title: "UEFA Final — Highlights Pack", platform: "Reference Library", video: 64, audio: 58, watermark: false, status: "REVIEW", score: 0.61 },
-];
-
 export default function DetectPage() {
   const [file, setFile] = useState<File | null>(null);
   const [stage, setStage] = useState<"idle" | "uploading" | "frames" | "audio" | "match" | "done">("idle");
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState<Match[]>([]);
+  const [statusText, setStatusText] = useState("Waiting for upload");
+  const [elapsedSec, setElapsedSec] = useState(0);
+  const [inFlight, setInFlight] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const onDrop = (e: React.DragEvent) => {
@@ -33,24 +30,62 @@ export default function DetectPage() {
   const run = async () => {
     if (!file) return toast.error("Choose a suspicious video first");
     setStage("uploading"); setProgress(0); setResults([]);
-    try {
-      await videosApi.detect(file, { title: file.name }, p => setProgress(p));
+    setStatusText("Uploading file to detection service...");
+    setElapsedSec(0);
+    setInFlight(true);
+
+    const t1 = setTimeout(() => {
       setStage("frames");
-      setTimeout(() => setStage("audio"), 800);
-      setTimeout(() => setStage("match"), 1500);
-      setTimeout(() => { setStage("done"); setResults(demoMatches); toast.success("Detection complete"); }, 2200);
-    } catch {
-      const t = setInterval(() => setProgress(p => {
-        if (p >= 100) { clearInterval(t); setStage("frames");
-          setTimeout(() => setStage("audio"), 600);
-          setTimeout(() => setStage("match"), 1200);
-          setTimeout(() => { setStage("done"); setResults(demoMatches); toast.message("Demo mode: simulated match"); }, 1800);
-          return 100;
-        }
-        return p + 9;
-      }), 100);
+      setStatusText("Extracting frames and building visual fingerprint...");
+    }, 1500);
+    const t2 = setTimeout(() => {
+      setStage("audio");
+      setStatusText("Analyzing audio spectrogram + frequency peaks...");
+    }, 5000);
+    const t3 = setTimeout(() => {
+      setStage("match");
+      setStatusText("Matching against reference catalog and fusing confidence...");
+    }, 9000);
+
+    try {
+      const res = await videosApi.detect(file, { title: file.name }, p => setProgress(p));
+      if (progress < 100) {
+        setProgress(100);
+      }
+      const matches: Match[] = ((res?.results ?? []) as any[]).map((m: any, index: number) => ({
+        id: `REF-${index + 1}`,
+        title: m?.video || "Unknown reference",
+        platform: "Reference Library",
+        video: Math.round(Number(m?.video_similarity ?? 0)),
+        audio: Math.round(Number(m?.audio_similarity ?? 0)),
+        watermark: Boolean(m?.watermark_verified),
+        status: normalizeStatus(m?.status),
+        score: Math.max(0, Math.min(1, Math.max(Number(m?.video_similarity ?? 0), Number(m?.audio_similarity ?? 0)) / 100)),
+      }));
+      setStage("done");
+      setStatusText("Detection finished.");
+      setResults(matches);
+      toast.success("Detection complete");
+    } catch (e: any) {
+      setStage("idle");
+      setProgress(0);
+      setStatusText("Detection failed.");
+      toast.error(e?.message || "Detection failed");
+    } finally {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      setInFlight(false);
     }
   };
+
+  useEffect(() => {
+    if (!inFlight) return;
+    const timer = setInterval(() => {
+      setElapsedSec((s) => s + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [inFlight]);
 
   return (
     <div className="space-y-6">
@@ -88,6 +123,15 @@ export default function DetectPage() {
               <Stage label="Audio" active={stage === "audio"} done={["match","done"].includes(stage)} />
               <Stage label="Match" active={stage === "match"} done={stage === "done"} />
             </motion.div>
+          )}
+
+          {stage !== "idle" && (
+            <div className="mt-4 rounded-xl border border-border/60 bg-surface-2/50 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-sm text-secondary">{statusText}</p>
+                <p className="text-xs font-mono text-muted-foreground">Elapsed: {formatElapsed(elapsedSec)}</p>
+              </div>
+            </div>
           )}
 
           {results.length > 0 && (
@@ -166,4 +210,18 @@ function Bar({ label, value, color }: { label: string; value: number; color: str
       </div>
     </div>
   );
+}
+
+function normalizeStatus(status: string): Match["status"] {
+  const s = String(status || "").toUpperCase();
+  if (s.includes("SAFE")) return "SAFE";
+  if (s.includes("VERIFIED")) return "VERIFIED_PIRACY";
+  if (s.includes("PIRATED")) return "PIRATED";
+  return "REVIEW";
+}
+
+function formatElapsed(totalSec: number) {
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  return `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 }

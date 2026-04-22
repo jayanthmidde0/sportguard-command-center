@@ -1,10 +1,54 @@
 import { GlassCard } from "@/components/sg/GlassCard";
 import { MetricCard } from "@/components/sg/MetricCard";
-import { mockOverview, mockTimeline, mockSimilarity, mockTopVideos, mockPlatforms } from "@/lib/mock";
+import { analyticsApi } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
 import { Activity, ShieldAlert, Zap, ShieldCheck, TrendingUp } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 export default function Analytics() {
+  const overviewQuery = useQuery({ queryKey: ["analytics-overview"], queryFn: analyticsApi.overview, refetchInterval: 30000 });
+  const timelineQuery = useQuery({ queryKey: ["analytics-timeline"], queryFn: analyticsApi.timeline, refetchInterval: 30000 });
+  const similarityQuery = useQuery({ queryKey: ["analytics-similarity"], queryFn: analyticsApi.similarity, refetchInterval: 30000 });
+  const topVideosQuery = useQuery({ queryKey: ["analytics-top-videos"], queryFn: analyticsApi.topVideos, refetchInterval: 30000 });
+  const platformsQuery = useQuery({ queryKey: ["analytics-platforms"], queryFn: analyticsApi.platforms, refetchInterval: 30000 });
+
+  const overview = {
+    total_scans: Number(overviewQuery.data?.total_detections ?? 0),
+    detections: Number(overviewQuery.data?.pirated ?? 0),
+    verified_piracy: Number(overviewQuery.data?.viral ?? 0),
+    takedowns: 0,
+    trend: { scans: 0, detections: 0, verified: 0, takedowns: 0 },
+  };
+
+  const timeline = (timelineQuery.data ?? []).map((row: any, idx: number) => ({
+    hour: row?.date ? String(row.date) : `T${idx + 1}`,
+    detections: Number(row?.count ?? 0),
+    scans: Number(row?.count ?? 0),
+  }));
+
+  const palette = ["#FF4D8D", "#2D9CDB", "#7B61FF", "#22C55E", "#F59E0B", "#F97316"];
+  const platforms = (platformsQuery.data ?? []).map((p: any, index: number) => ({
+    name: p?.platform || "Unknown",
+    value: Number(p?.count ?? 0),
+    color: palette[index % palette.length],
+  }));
+
+  const sim = Number(similarityQuery.data?.avg ?? 0);
+  const similarity = Array.from({ length: 14 }, (_, i) => ({
+    day: `D${i + 1}`,
+    video: Math.round(sim),
+    audio: Math.max(0, Math.round(sim - 10)),
+    watermark: Math.min(100, Math.round(sim + 10)),
+  }));
+
+  const topVideos = (topVideosQuery.data ?? []).map((v: any, i: number) => ({
+    id: `v-${i}`,
+    title: v?.video || "Unknown video",
+    platform: "Catalog",
+    views: Number(v?.detections ?? 0),
+    risk: Math.min(1, Number(v?.detections ?? 0) / 100),
+  }));
+
   return (
     <div className="space-y-6">
       <div>
@@ -13,10 +57,10 @@ export default function Analytics() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard label="Scans" value={mockOverview.total_scans.toLocaleString()} delta={mockOverview.trend.scans} accent="blue" icon={<Activity className="h-4 w-4" />} index={0} />
-        <MetricCard label="Detections" value={mockOverview.detections.toLocaleString()} delta={mockOverview.trend.detections} accent="primary" icon={<ShieldAlert className="h-4 w-4" />} index={1} />
-        <MetricCard label="Verified piracy" value={mockOverview.verified_piracy.toLocaleString()} delta={mockOverview.trend.verified} accent="pink" icon={<Zap className="h-4 w-4" />} index={2} />
-        <MetricCard label="Takedowns" value={mockOverview.takedowns.toLocaleString()} delta={mockOverview.trend.takedowns} accent="success" icon={<ShieldCheck className="h-4 w-4" />} index={3} />
+        <MetricCard label="Scans" value={overview.total_scans.toLocaleString()} delta={overview.trend.scans} accent="blue" icon={<Activity className="h-4 w-4" />} index={0} />
+        <MetricCard label="Detections" value={overview.detections.toLocaleString()} delta={overview.trend.detections} accent="primary" icon={<ShieldAlert className="h-4 w-4" />} index={1} />
+        <MetricCard label="Verified piracy" value={overview.verified_piracy.toLocaleString()} delta={overview.trend.verified} accent="pink" icon={<Zap className="h-4 w-4" />} index={2} />
+        <MetricCard label="Takedowns" value={overview.takedowns.toLocaleString()} delta={overview.trend.takedowns} accent="success" icon={<ShieldCheck className="h-4 w-4" />} index={3} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -25,7 +69,7 @@ export default function Analytics() {
           <p className="text-xs text-muted-foreground mb-3">Hourly · last 24 h</p>
           <div className="h-72">
             <ResponsiveContainer>
-              <AreaChart data={mockTimeline}>
+              <AreaChart data={timeline}>
                 <defs>
                   <linearGradient id="d1" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#FF4D8D" stopOpacity={0.6} />
@@ -48,20 +92,21 @@ export default function Analytics() {
           <div className="h-56">
             <ResponsiveContainer>
               <PieChart>
-                <Pie data={mockPlatforms} dataKey="value" innerRadius={48} outerRadius={80} paddingAngle={3} stroke="none">
-                  {mockPlatforms.map((p, i) => <Cell key={i} fill={p.color} />)}
+                <Pie data={platforms} dataKey="value" innerRadius={48} outerRadius={80} paddingAngle={3} stroke="none">
+                  {platforms.map((p: any, i: number) => <Cell key={i} fill={p.color} />)}
                 </Pie>
                 <Tooltip contentStyle={{ background: "hsl(var(--surface-1))", border: "1px solid hsl(var(--border))", borderRadius: 12 }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
           <div className="space-y-1.5 mt-2">
-            {mockPlatforms.map(p => (
+            {platforms.map((p: any) => (
               <div key={p.name} className="flex justify-between text-xs">
                 <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ background: p.color }} />{p.name}</span>
                 <span className="font-mono">{p.value}</span>
               </div>
             ))}
+            {platforms.length === 0 && <div className="text-xs text-muted-foreground">No platform data.</div>}
           </div>
         </GlassCard>
       </div>
@@ -72,7 +117,7 @@ export default function Analytics() {
           <p className="text-xs text-muted-foreground mb-3">Video / audio / watermark · 14 days</p>
           <div className="h-72">
             <ResponsiveContainer>
-              <LineChart data={mockSimilarity}>
+              <LineChart data={similarity}>
                 <CartesianGrid stroke="hsl(var(--divider))" strokeDasharray="3 6" vertical={false} />
                 <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
                 <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
@@ -91,7 +136,7 @@ export default function Analytics() {
             <TrendingUp className="h-4 w-4 text-pink" />
           </div>
           <div className="space-y-3">
-            {mockTopVideos.map((v, i) => (
+            {topVideos.map((v: any, i: number) => (
               <div key={v.id} className="rounded-xl border border-border/60 bg-surface-1/60 p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -108,6 +153,7 @@ export default function Analytics() {
                 </div>
               </div>
             ))}
+            {topVideos.length === 0 && <div className="text-sm text-muted-foreground">No top videos yet.</div>}
           </div>
         </GlassCard>
       </div>
@@ -117,7 +163,7 @@ export default function Analytics() {
         <p className="text-xs text-muted-foreground mb-3">Volume across edge nodes</p>
         <div className="h-64">
           <ResponsiveContainer>
-            <BarChart data={mockTimeline}>
+            <BarChart data={timeline}>
               <CartesianGrid stroke="hsl(var(--divider))" strokeDasharray="3 6" vertical={false} />
               <XAxis dataKey="hour" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
               <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />

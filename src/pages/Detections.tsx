@@ -1,23 +1,54 @@
 import { GlassCard } from "@/components/sg/GlassCard";
 import { StatusBadge } from "@/components/sg/StatusBadge";
-import { mockDetections } from "@/lib/mock";
+import { detectionsApi } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Search, Download, X, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const STATUS_OPTS = ["All", "SAFE", "PIRATED", "VERIFIED_PIRACY", "REVIEW", "PROCESSING"];
 
+type DetectionRow = {
+  id: string;
+  title: string;
+  platform: string;
+  similarity: { video: number; audio: number; watermark: boolean };
+  status: "SAFE" | "PIRATED" | "VERIFIED_PIRACY" | "REVIEW" | "PROCESSING";
+  score: number;
+  detected_at: string;
+  source_url: string;
+};
+
 export default function Detections() {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("All");
   const [minScore, setMinScore] = useState(0);
-  const [open, setOpen] = useState<typeof mockDetections[0] | null>(null);
+  const [open, setOpen] = useState<DetectionRow | null>(null);
+  const detectionsQuery = useQuery({ queryKey: ["detections-list"], queryFn: () => detectionsApi.list(), refetchInterval: 30000 });
 
-  const rows = useMemo(() => mockDetections.filter(d =>
+  const apiRows: DetectionRow[] = ((detectionsQuery.data ?? []) as any[]).map((d: any) => {
+    const score = Number(d?.similarity ?? 0) / 100;
+    return {
+      id: `DET-${d?.id ?? "N/A"}`,
+      title: d?.video_name || "Unknown video",
+      platform: d?.source || "Unknown",
+      similarity: {
+        video: Math.round(Number(d?.similarity ?? 0)),
+        audio: Math.round(Number(d?.similarity ?? 0)),
+        watermark: String(d?.status || "").toUpperCase().includes("WATERMARK"),
+      },
+      status: normalizeStatus(d?.status),
+      score,
+      detected_at: new Date().toISOString(),
+      source_url: "#",
+    };
+  });
+
+  const rows = useMemo(() => apiRows.filter(d =>
     (status === "All" || d.status === status) &&
     d.score * 100 >= minScore &&
     (q === "" || d.title.toLowerCase().includes(q.toLowerCase()) || d.id.toLowerCase().includes(q.toLowerCase()))
-  ), [q, status, minScore]);
+  ), [apiRows, q, status, minScore]);
 
   return (
     <div className="space-y-6">
@@ -112,7 +143,7 @@ export default function Detections() {
                 <Row k="Platform" v={open.platform} />
                 <Row k="Watermark" v={open.similarity.watermark ? "Verified" : "Not detected"} />
                 <Row k="Detected" v={new Date(open.detected_at).toLocaleString()} />
-                <Row k="Source" v={<a href={open.source_url} target="_blank" rel="noreferrer" className="text-primary inline-flex items-center gap-1">Open <ExternalLink className="h-3 w-3" /></a>} />
+                    <Row k="Source" v={open.source_url !== "#" ? <a href={open.source_url} target="_blank" rel="noreferrer" className="text-primary inline-flex items-center gap-1">Open <ExternalLink className="h-3 w-3" /></a> : <span className="text-muted-foreground">Not available</span>} />
               </div>
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <button className="rounded-xl bg-grad-pink px-4 py-2.5 text-sm font-semibold shadow-[0_0_20px_hsl(var(--pink)/0.4)]">Issue takedown</button>
@@ -136,4 +167,13 @@ function Mini({ label, value }: { label: string; value: string }) {
 }
 function Row({ k, v }: { k: string; v: React.ReactNode }) {
   return <div className="flex items-center justify-between text-sm"><span className="text-muted-foreground">{k}</span><span>{v}</span></div>;
+}
+
+function normalizeStatus(status: string): DetectionRow["status"] {
+  const s = String(status || "").toUpperCase();
+  if (s.includes("SAFE")) return "SAFE";
+  if (s.includes("VERIFIED")) return "VERIFIED_PIRACY";
+  if (s.includes("PIRATED")) return "PIRATED";
+  if (s.includes("REVIEW")) return "REVIEW";
+  return "PROCESSING";
 }

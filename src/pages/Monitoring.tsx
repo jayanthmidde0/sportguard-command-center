@@ -1,9 +1,25 @@
 import { GlassCard } from "@/components/sg/GlassCard";
-import { mockMonitoring } from "@/lib/mock";
+import { monitoringApi } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
 import { Radar, Youtube, Send, Activity, ShieldAlert } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function Monitoring() {
+  const statusQuery = useQuery({ queryKey: ["monitoring-status"], queryFn: monitoringApi.status, refetchInterval: 30000 });
+  const eventsQuery = useQuery({ queryKey: ["monitoring-events"], queryFn: () => monitoringApi.events(50), refetchInterval: 15000 });
+
+  const platformRows = statusQuery.data ?? [];
+  const youtubeHits = Number(platformRows.find((p: any) => String(p.platform || "").toLowerCase().includes("youtube"))?.count ?? 0);
+  const telegramHits = Number(platformRows.find((p: any) => String(p.platform || "").toLowerCase().includes("telegram"))?.count ?? 0);
+  const youtubeData = { active: true, scanned_24h: youtubeHits, hits: youtubeHits, latency_ms: 0 };
+  const telegramData = { active: true, scanned_24h: telegramHits, hits: telegramHits, latency_ms: 0 };
+  const alerts = (eventsQuery.data ?? []).slice(-12).reverse().map((a: any, idx: number) => ({
+    id: `evt-${idx}`,
+    at: formatAgo(a?.received_at),
+    level: "info" as const,
+    text: stringifyPayload(a?.payload),
+  }));
+
   return (
     <div className="space-y-6">
       <div>
@@ -12,8 +28,8 @@ export default function Monitoring() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Crawler name="YouTube scanner" icon={<Youtube className="h-5 w-5" />} accent="from-pink/30 to-pink/0" data={mockMonitoring.youtube} />
-        <Crawler name="Telegram scanner" icon={<Send className="h-5 w-5" />} accent="from-info/30 to-info/0" data={mockMonitoring.telegram} />
+        <Crawler name="YouTube scanner" icon={<Youtube className="h-5 w-5" />} accent="from-pink/30 to-pink/0" data={youtubeData} />
+        <Crawler name="Telegram scanner" icon={<Send className="h-5 w-5" />} accent="from-info/30 to-info/0" data={telegramData} />
       </div>
 
       <GlassCard className="p-6">
@@ -25,7 +41,7 @@ export default function Monitoring() {
           <span className="text-[10px] font-mono uppercase tracking-wider text-success">● connected</span>
         </div>
         <div className="space-y-2.5">
-          {mockMonitoring.alerts.map((a, i) => (
+          {alerts.map((a, i) => (
             <motion.div key={a.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.06 }}
               className="flex items-start gap-3 rounded-xl border border-border/60 bg-surface-1/60 p-4">
               <span className={`mt-1.5 h-2 w-2 rounded-full ${
@@ -43,6 +59,7 @@ export default function Monitoring() {
               }`}>{a.level}</span>
             </motion.div>
           ))}
+          {alerts.length === 0 && <div className="text-sm text-muted-foreground">No webhook events received yet.</div>}
         </div>
       </GlassCard>
     </div>
@@ -81,4 +98,24 @@ function Stat({ icon, label, value }: { icon?: React.ReactNode; label: string; v
       <div className="mt-1 font-display text-lg font-semibold">{value}</div>
     </div>
   );
+}
+
+function stringifyPayload(payload: unknown) {
+  if (!payload) return "Webhook event";
+  if (typeof payload === "string") return payload;
+  try {
+    return JSON.stringify(payload).slice(0, 140);
+  } catch {
+    return "Webhook event";
+  }
+}
+
+function formatAgo(iso?: string) {
+  if (!iso) return "just now";
+  const ts = Date.parse(iso);
+  if (!Number.isFinite(ts)) return "just now";
+  const mins = Math.max(0, Math.floor((Date.now() - ts) / 60000));
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m ago`;
+  return `${Math.floor(mins / 60)}h ago`;
 }

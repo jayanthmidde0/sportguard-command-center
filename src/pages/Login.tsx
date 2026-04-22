@@ -25,15 +25,6 @@ export default function Login() {
       toast.success("Welcome back, operator.");
       nav((location.state as any)?.from || "/app");
     } catch (err: any) {
-      // Offline-friendly: allow demo entry so the UI is usable.
-      if (err?.status === 0) {
-        const { tokenStore } = await import("@/lib/api");
-        tokenStore.set("demo-token");
-        localStorage.setItem("sg_user", JSON.stringify({ email, name: "Demo Operator" }));
-        toast.message("Backend offline — entering demo mode");
-        window.location.href = "/app";
-        return;
-      }
       toast.error(err?.message || "Login failed");
     } finally {
       setLoading(false);

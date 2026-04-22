@@ -21,11 +21,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const t = tokenStore.get();
     if (!t) { setLoading(false); return; }
     authApi.me()
-      .then((u: any) => setUser(u?.user ?? u ?? null))
-      .catch(() => {
-        const cached = localStorage.getItem("sg_user");
-        if (cached) setUser(JSON.parse(cached));
-      })
+      .then((u: any) => setUser(u?.user ?? null))
       .finally(() => setLoading(false));
   }, []);
 
@@ -38,9 +34,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const register = async (email: string, password: string, name?: string) => {
-    const r = await authApi.register({ email, password, name });
-    if (r.access_token) tokenStore.set(r.access_token);
-    const u = r.user ?? { email, name };
+    await authApi.register({ email, password, name });
+    const loginRes = await authApi.login(email, password);
+    if (loginRes.access_token) tokenStore.set(loginRes.access_token);
+    const u = loginRes.user ?? { email, name };
     setUser(u);
     localStorage.setItem("sg_user", JSON.stringify(u));
   };

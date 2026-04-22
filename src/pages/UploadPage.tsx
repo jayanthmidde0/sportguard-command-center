@@ -25,16 +25,11 @@ export default function UploadPage() {
     try {
       await videosApi.uploadReference(file, { title, description }, p => setProgress(p));
       setStage("processing");
-      setTimeout(() => { setStage("done"); toast.success("Reference fingerprint indexed"); }, 1200);
+      setTimeout(() => { setStage("done"); toast.success("Reference fingerprint indexed"); }, 800);
     } catch (e: any) {
-      // Offline-friendly demo
-      const tick = setInterval(() => setProgress(p => {
-        if (p >= 100) { clearInterval(tick); setStage("processing");
-          setTimeout(() => { setStage("done"); toast.message("Demo mode: fingerprint simulated"); }, 1200);
-          return 100;
-        }
-        return p + 7;
-      }), 120);
+      setStage("idle");
+      setProgress(0);
+      toast.error(e?.message || "Upload failed");
     }
   };
 

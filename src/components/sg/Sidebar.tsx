@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Upload, ScanSearch, BarChart3, ShieldAlert,
-  Search, Radar, Settings, Shield, ChevronLeft
+  Search, Radar, Settings, Shield, ChevronLeft, RadioTower
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -9,6 +9,8 @@ import { useState } from "react";
 const items = [
   { to: "/app", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/app/upload", label: "Upload Reference", icon: Upload },
+  { to: "/app/broadcast", label: "Broadcast", icon: RadioTower },
+  { to: "/app/watermark", label: "Watermark", icon: Shield },
   { to: "/app/detect", label: "Detect Video", icon: ScanSearch },
   { to: "/app/detections", label: "Detections", icon: ShieldAlert },
   { to: "/app/analytics", label: "Analytics", icon: BarChart3 },

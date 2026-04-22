@@ -1,25 +1,41 @@
 import { GlassCard } from "@/components/sg/GlassCard";
 import { StatusBadge } from "@/components/sg/StatusBadge";
+import { detectionsApi } from "@/lib/api";
 import { Search, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { useMutation } from "@tanstack/react-query";
 
-const sample = [
-  { id: "S1", title: "[LIVE] UEFA Final HD 1080p", platform: "YouTube", url: "youtube.com/watch?v=abc", risk: 0.94, status: "VERIFIED_PIRACY" as const },
-  { id: "S2", title: "UEFA Final replay full match", platform: "Telegram", url: "t.me/sport_hd/124", risk: 0.81, status: "PIRATED" as const },
-  { id: "S3", title: "Champions League highlights", platform: "TikTok", url: "tiktok.com/@clipsdaily", risk: 0.62, status: "REVIEW" as const },
-  { id: "S4", title: "Football Tactics Breakdown", platform: "YouTube", url: "youtube.com/watch?v=xyz", risk: 0.18, status: "SAFE" as const },
-];
+type SearchRow = { id: string; title: string; platform: string; url: string; risk: number; status: "SAFE" | "PIRATED" | "VERIFIED_PIRACY" | "REVIEW" | "PROCESSING" };
 
 export default function ManualSearch() {
   const [q, setQ] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [results, setResults] = useState<typeof sample>([]);
+  const [results, setResults] = useState<SearchRow[]>([]);
+  const searchMutation = useMutation({
+    mutationFn: async (query: string) => {
+      const rows = await detectionsApi.list();
+      const value = query.toLowerCase().trim();
+      return (rows ?? [])
+        .filter((d: any) => !value || String(d?.video_name || "").toLowerCase().includes(value) || String(d?.source || "").toLowerCase().includes(value))
+        .slice(0, 24)
+        .map((d: any) => ({
+          id: `S-${d?.id ?? "N/A"}`,
+          title: d?.video_name || "Unknown video",
+          platform: d?.source || "Unknown",
+          url: "",
+          risk: Math.max(0, Math.min(1, Number(d?.similarity ?? 0) / 100)),
+          status: normalizeStatus(d?.status),
+        }));
+    },
+    onSuccess: setResults,
+  });
+
+  const busy = searchMutation.isPending;
 
   const search = (e: React.FormEvent) => {
     e.preventDefault();
-    setBusy(true); setResults([]);
-    setTimeout(() => { setResults(sample); setBusy(false); }, 900);
+    setResults([]);
+    searchMutation.mutate(q);
   };
 
   return (
@@ -62,7 +78,7 @@ export default function ManualSearch() {
                   <div className="min-w-0">
                     <div className="text-xs text-muted-foreground font-mono">{r.platform}</div>
                     <div className="font-semibold mt-0.5 truncate">{r.title}</div>
-                    <div className="text-xs text-muted-foreground truncate mt-0.5">{r.url}</div>
+                    <div className="text-xs text-muted-foreground truncate mt-0.5">{r.url || "No source URL"}</div>
                   </div>
                   <StatusBadge status={r.status} />
                 </div>
@@ -87,4 +103,13 @@ export default function ManualSearch() {
       )}
     </div>
   );
+}
+
+function normalizeStatus(status: string): SearchRow["status"] {
+  const s = String(status || "").toUpperCase();
+  if (s.includes("SAFE")) return "SAFE";
+  if (s.includes("VERIFIED")) return "VERIFIED_PIRACY";
+  if (s.includes("PIRATED")) return "PIRATED";
+  if (s.includes("REVIEW")) return "REVIEW";
+  return "PROCESSING";
 }

@@ -12,6 +12,8 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import UploadPage from "./pages/UploadPage";
+import BroadcastPage from "./pages/Broadcast";
+import WatermarkPage from "./pages/Watermark";
 import DetectPage from "./pages/DetectPage";
 import Detections from "./pages/Detections";
 import Analytics from "./pages/Analytics";
@@ -36,6 +38,8 @@ const App = () => (
             <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
               <Route path="/app" element={<Dashboard />} />
               <Route path="/app/upload" element={<UploadPage />} />
+              <Route path="/app/broadcast" element={<BroadcastPage />} />
+              <Route path="/app/watermark" element={<WatermarkPage />} />
               <Route path="/app/detect" element={<DetectPage />} />
               <Route path="/app/detections" element={<Detections />} />
               <Route path="/app/analytics" element={<Analytics />} />

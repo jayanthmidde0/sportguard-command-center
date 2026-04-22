@@ -1,13 +1,62 @@
 import { GlassCard } from "@/components/sg/GlassCard";
 import { MetricCard } from "@/components/sg/MetricCard";
 import { StatusBadge } from "@/components/sg/StatusBadge";
-import { mockOverview, mockTimeline, mockDetections, mockMonitoring, mockPlatforms } from "@/lib/mock";
+import { analyticsApi, detectionsApi, monitoringApi } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Activity, ShieldAlert, ShieldCheck, Zap, ArrowRight, Radar, Server } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, PieChart, Pie, Cell, Legend } from "recharts";
 import { Link } from "react-router-dom";
 
 export default function Dashboard() {
+  const overviewQuery = useQuery({ queryKey: ["dashboard-overview"], queryFn: analyticsApi.overview, refetchInterval: 30000 });
+  const timelineQuery = useQuery({ queryKey: ["dashboard-timeline"], queryFn: analyticsApi.timeline, refetchInterval: 30000 });
+  const platformsQuery = useQuery({ queryKey: ["dashboard-platforms"], queryFn: analyticsApi.platforms, refetchInterval: 30000 });
+  const detectionsQuery = useQuery({ queryKey: ["dashboard-detections"], queryFn: () => detectionsApi.list(), refetchInterval: 30000 });
+  const eventsQuery = useQuery({ queryKey: ["dashboard-events"], queryFn: () => monitoringApi.events(20), refetchInterval: 15000 });
+
+  const overview = {
+    total_scans: Number(overviewQuery.data?.total_detections ?? 0),
+    detections: Number(overviewQuery.data?.pirated ?? 0),
+    verified_piracy: Number(overviewQuery.data?.viral ?? 0),
+    takedowns: 0,
+    trend: { scans: 0, detections: 0, verified: 0, takedowns: 0 },
+  };
+
+  const timeline = (timelineQuery.data ?? []).map((row: any, index: number) => ({
+    hour: row?.date ? String(row.date) : `T${index + 1}`,
+    scans: Number(row?.count ?? 0),
+    detections: Number(row?.count ?? 0),
+    verified: 0,
+  }));
+
+  const palette = ["#FF4D8D", "#2D9CDB", "#7B61FF", "#22C55E", "#F59E0B", "#F97316"];
+  const platforms = (platformsQuery.data ?? []).map((p: any, index: number) => ({
+    name: p?.platform || "Unknown",
+    value: Number(p?.count ?? 0),
+    color: palette[index % palette.length],
+  }));
+
+  const detections = ((detectionsQuery.data ?? []) as any[]).map((d: any) => ({
+    id: `DET-${d.id}`,
+    title: d.video_name || "Unknown video",
+    platform: d.source || "Unknown",
+    score: Number(d.similarity ?? 0) / 100,
+    status: normalizeStatus(d.status),
+  }));
+
+  const alerts = (eventsQuery.data ?? []).slice(-4).reverse().map((e: any, index: number) => ({
+    id: `evt-${index}`,
+    at: formatAgo(e?.received_at),
+    level: inferLevel(stringifyPayload(e?.payload)),
+    text: stringifyPayload(e?.payload),
+  }));
+
+  const platformCounts = {
+    youtube: platforms.find((p: any) => String(p.name).toLowerCase().includes("youtube"))?.value ?? 0,
+    telegram: platforms.find((p: any) => String(p.name).toLowerCase().includes("telegram"))?.value ?? 0,
+  };
+
   return (
     <div className="space-y-6">
       {/* Hero header */}
@@ -24,7 +73,7 @@ export default function Dashboard() {
               Threat intelligence — <span className="text-white/80">last 24 hours</span>
             </h1>
             <p className="mt-2 text-white/70 max-w-xl">
-              Continuous AI fingerprint matching across monitored platforms. {mockOverview.verified_piracy} verified piracy events detected today.
+              Continuous AI fingerprint matching across monitored platforms. {overview.verified_piracy} verified piracy events detected today.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -40,10 +89,10 @@ export default function Dashboard() {
 
       {/* Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard index={0} label="Total scans" value={mockOverview.total_scans.toLocaleString()} delta={mockOverview.trend.scans} accent="blue" icon={<Activity className="h-4 w-4" />} />
-        <MetricCard index={1} label="Detections" value={mockOverview.detections.toLocaleString()} delta={mockOverview.trend.detections} accent="primary" icon={<ShieldAlert className="h-4 w-4" />} />
-        <MetricCard index={2} label="Verified piracy" value={mockOverview.verified_piracy.toLocaleString()} delta={mockOverview.trend.verified} accent="pink" icon={<Zap className="h-4 w-4" />} />
-        <MetricCard index={3} label="Takedowns" value={mockOverview.takedowns.toLocaleString()} delta={mockOverview.trend.takedowns} accent="success" icon={<ShieldCheck className="h-4 w-4" />} />
+        <MetricCard index={0} label="Total scans" value={overview.total_scans.toLocaleString()} delta={overview.trend.scans} accent="blue" icon={<Activity className="h-4 w-4" />} />
+        <MetricCard index={1} label="Detections" value={overview.detections.toLocaleString()} delta={overview.trend.detections} accent="primary" icon={<ShieldAlert className="h-4 w-4" />} />
+        <MetricCard index={2} label="Verified piracy" value={overview.verified_piracy.toLocaleString()} delta={overview.trend.verified} accent="pink" icon={<Zap className="h-4 w-4" />} />
+        <MetricCard index={3} label="Takedowns" value={overview.takedowns.toLocaleString()} delta={overview.trend.takedowns} accent="success" icon={<ShieldCheck className="h-4 w-4" />} />
       </div>
 
       {/* Chart + side panel */}
@@ -62,7 +111,7 @@ export default function Dashboard() {
           </div>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={mockTimeline}>
+              <AreaChart data={timeline}>
                 <defs>
                   <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#7B61FF" stopOpacity={0.5} />
@@ -95,7 +144,7 @@ export default function Dashboard() {
             <Radar className="h-4 w-4 text-pink animate-pulse" />
           </div>
           <div className="space-y-3">
-            {mockMonitoring.alerts.map(a => (
+            {alerts.map(a => (
               <div key={a.id} className="rounded-xl border border-border/60 bg-surface-1/60 p-3 hover:border-primary/40 transition-colors">
                 <div className="flex items-start gap-2.5">
                   <span className={`mt-1.5 h-2 w-2 rounded-full ${
@@ -109,10 +158,11 @@ export default function Dashboard() {
                 </div>
               </div>
             ))}
+            {alerts.length === 0 && <div className="text-sm text-muted-foreground">No webhook events yet.</div>}
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <MiniStat icon={<Server className="h-3.5 w-3.5" />} label="YouTube" value={mockMonitoring.youtube.scanned_24h.toLocaleString()} />
-            <MiniStat icon={<Server className="h-3.5 w-3.5" />} label="Telegram" value={mockMonitoring.telegram.scanned_24h.toLocaleString()} />
+            <MiniStat icon={<Server className="h-3.5 w-3.5" />} label="YouTube" value={platformCounts.youtube.toLocaleString()} />
+            <MiniStat icon={<Server className="h-3.5 w-3.5" />} label="Telegram" value={platformCounts.telegram.toLocaleString()} />
           </div>
         </GlassCard>
       </div>
@@ -141,7 +191,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {mockDetections.slice(0, 6).map(d => (
+                {detections.slice(0, 6).map(d => (
                   <tr key={d.id} className="border-b border-border/40 hover:bg-surface-3/40 transition-colors">
                     <td className="px-5 py-3 font-mono text-xs text-muted-foreground">{d.id}</td>
                     <td className="px-3 py-3 max-w-[260px] truncate">{d.title}</td>
@@ -152,6 +202,7 @@ export default function Dashboard() {
                 ))}
               </tbody>
             </table>
+            {detections.length === 0 && <div className="px-5 py-10 text-sm text-muted-foreground">No detections available.</div>}
           </div>
         </GlassCard>
 
@@ -161,15 +212,15 @@ export default function Dashboard() {
           <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={mockPlatforms} dataKey="value" innerRadius={48} outerRadius={78} paddingAngle={3} stroke="none">
-                  {mockPlatforms.map((p, i) => <Cell key={i} fill={p.color} />)}
+                <Pie data={platforms} dataKey="value" innerRadius={48} outerRadius={78} paddingAngle={3} stroke="none">
+                  {platforms.map((p: any, i: number) => <Cell key={i} fill={p.color} />)}
                 </Pie>
                 <Tooltip contentStyle={{ background: "hsl(var(--surface-1))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
           <div className="mt-2 space-y-1.5">
-            {mockPlatforms.map(p => (
+            {platforms.map((p: any) => (
               <div key={p.name} className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: p.color }} />
@@ -178,11 +229,48 @@ export default function Dashboard() {
                 <span className="font-mono">{p.value}</span>
               </div>
             ))}
+            {platforms.length === 0 && <div className="text-xs text-muted-foreground">No platform stats yet.</div>}
           </div>
         </GlassCard>
       </div>
     </div>
   );
+}
+
+function normalizeStatus(status: string) {
+  const s = String(status || "").toUpperCase();
+  if (s.includes("SAFE")) return "SAFE";
+  if (s.includes("VERIFIED")) return "VERIFIED_PIRACY";
+  if (s.includes("PIRATED")) return "PIRATED";
+  if (s.includes("REVIEW")) return "REVIEW";
+  return "PROCESSING";
+}
+
+function stringifyPayload(payload: unknown) {
+  if (!payload) return "Webhook event received";
+  if (typeof payload === "string") return payload;
+  try {
+    return JSON.stringify(payload).slice(0, 120);
+  } catch {
+    return "Webhook event received";
+  }
+}
+
+function formatAgo(iso?: string) {
+  if (!iso) return "just now";
+  const ts = Date.parse(iso);
+  if (!Number.isFinite(ts)) return "just now";
+  const mins = Math.max(0, Math.floor((Date.now() - ts) / 60000));
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m ago`;
+  return `${Math.floor(mins / 60)}h ago`;
+}
+
+function inferLevel(text: string): "danger" | "warning" | "info" {
+  const t = text.toLowerCase();
+  if (t.includes("verified") || t.includes("piracy") || t.includes("blocked")) return "danger";
+  if (t.includes("high") || t.includes("suspicious") || t.includes("match")) return "warning";
+  return "info";
 }
 
 function Legend2({ color, label }: { color: string; label: string }) {
