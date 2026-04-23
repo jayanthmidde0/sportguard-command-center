@@ -1,15 +1,60 @@
 import { GlassCard } from "@/components/sg/GlassCard";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, FileVideo, Loader2, Shield, Upload, X, AlertTriangle } from "lucide-react";
 import { watermarkApi } from "@/lib/api";
 import { toast } from "sonner";
+
+type WatermarkResult = {
+  verified?: boolean;
+  extracted?: string;
+  content_id?: string;
+  owner?: string;
+  embedded_at?: string;
+  method?: string;
+  [key: string]: unknown;
+};
+
+const WATERMARK_STATE_KEY = "sg_watermark_page_state";
 
 export default function WatermarkPage() {
   const [file, setFile] = useState<File | null>(null);
   const [progress, setProgress] = useState(0);
   const [pending, setPending] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<WatermarkResult | null>(null);
+  const [lastFileName, setLastFileName] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem(WATERMARK_STATE_KEY);
+    if (!raw) return;
+
+    try {
+      const saved = JSON.parse(raw);
+      if (saved?.result) {
+        setResult(saved.result);
+        setProgress(Number(saved.progress ?? 0));
+        setLastFileName(saved.lastFileName ? String(saved.lastFileName) : null);
+      }
+    } catch {
+      sessionStorage.removeItem(WATERMARK_STATE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!result) {
+      sessionStorage.removeItem(WATERMARK_STATE_KEY);
+      return;
+    }
+
+    sessionStorage.setItem(
+      WATERMARK_STATE_KEY,
+      JSON.stringify({
+        result,
+        progress,
+        lastFileName,
+      })
+    );
+  }, [lastFileName, progress, result]);
 
   const verify = async () => {
     if (!file) return toast.error("Choose a suspect/broadcast video first");
@@ -18,10 +63,11 @@ export default function WatermarkPage() {
     setResult(null);
     try {
       const data = await watermarkApi.verify(file, undefined, (p) => setProgress(p));
-      setResult(data);
+      setResult(data as WatermarkResult);
       toast.success(data?.verified ? "Watermark verified" : "Watermark not found");
-    } catch (e: any) {
-      toast.error(e?.message || "Verification failed");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Verification failed";
+      toast.error(message);
     } finally {
       setPending(false);
     }
@@ -51,7 +97,13 @@ export default function WatermarkPage() {
               type="file"
               accept="video/*"
               hidden
-              onChange={(e) => e.target.files?.[0] && setFile(e.target.files[0])}
+              onChange={(e) => {
+                const nextFile = e.target.files?.[0];
+                if (nextFile) {
+                  setFile(nextFile);
+                  setLastFileName(nextFile.name);
+                }
+              }}
             />
             <div>
               <div className="mx-auto h-14 w-14 rounded-2xl bg-grad-cyber grid place-items-center mb-4 shadow-[0_0_30px_hsl(var(--primary)/0.4)]">
@@ -59,11 +111,20 @@ export default function WatermarkPage() {
               </div>
               <h3 className="font-display text-lg font-semibold">Drop video to verify watermark</h3>
               <p className="text-sm text-muted-foreground mt-1">DWT extraction uses multi-frame voting for higher robustness.</p>
+              {result && !file && (
+                <div className="mt-4 rounded-xl border border-border/60 bg-surface-1/70 px-4 py-3 text-left text-sm">
+                  <div className="font-semibold">Last verification preserved</div>
+                  <div className="mt-1 text-muted-foreground">
+                    {lastFileName ? `${lastFileName} · ` : ""}
+                    {result?.verified ? "Watermark verified" : "No valid watermark detected"}
+                  </div>
+                </div>
+              )}
               {file && (
                 <div className="mt-4 inline-flex items-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-4 py-2">
                   <FileVideo className="h-4 w-4 text-primary" />
                   <span className="text-sm">{file.name}</span>
-                  <button className="text-muted-foreground hover:text-danger" onClick={(e) => { e.stopPropagation(); setFile(null); setResult(null); }}>
+                  <button className="text-muted-foreground hover:text-danger" onClick={(e) => { e.stopPropagation(); setFile(null); }}>
                     <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -96,6 +157,13 @@ export default function WatermarkPage() {
                 <MetaItem k="Owner" v={String(result?.owner || "-")} />
                 <MetaItem k="Embedded At" v={String(result?.embedded_at || "-")} />
               </div>
+            </div>
+          )}
+
+          {result && (
+            <div className="mt-3 rounded-xl border border-border/60 bg-surface-1/70 p-3 text-xs text-muted-foreground">
+              <div className="font-semibold text-foreground">Last verification file</div>
+              <div className="mt-1 break-all">{lastFileName || "Unknown file"}</div>
             </div>
           )}
         </GlassCard>

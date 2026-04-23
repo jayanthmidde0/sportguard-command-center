@@ -18,7 +18,7 @@ const NotFound = () => {
         </div>
         <p className="font-mono text-xs uppercase tracking-[0.3em] text-pink">Error · 404</p>
         <h1 className="mt-3 font-display text-6xl md:text-7xl font-semibold">Signal lost</h1>
-        <p className="mt-4 max-w-md mx-auto text-secondary">The page you tried to reach is not part of the SportGuard network.</p>
+        <p className="mt-4 max-w-md mx-auto text-secondary">The page you tried to reach is not part of the PICKPIRE network.</p>
         <Link to="/" className="mt-8 inline-flex items-center gap-2 rounded-xl bg-grad-cyber px-5 py-3 text-sm font-semibold shadow-[0_0_30px_hsl(var(--primary)/0.5)]">
           <Home className="h-4 w-4" /> Return to base
         </Link>

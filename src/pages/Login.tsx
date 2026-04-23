@@ -10,7 +10,7 @@ export default function Login() {
   const { login, user } = useAuth();
   const nav = useNavigate();
   const location = useLocation();
-  const [email, setEmail] = useState("operator@sportguard.io");
+  const [email, setEmail] = useState("operator@pickpire.io");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -42,7 +42,7 @@ export default function Login() {
               <Shield className="h-6 w-6 text-white" />
             </div>
             <div>
-              <div className="font-display text-xl font-semibold">SportGuard</div>
+              <div className="font-display text-xl font-semibold">PICKPIRE</div>
               <div className="font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">command center</div>
             </div>
           </div>
@@ -72,10 +72,10 @@ export default function Login() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="glass-strong rounded-3xl p-8">
           <div className="md:hidden flex items-center gap-2 mb-6">
             <div className="h-10 w-10 rounded-xl bg-grad-cyber grid place-items-center"><Shield className="h-5 w-5" /></div>
-            <span className="font-display text-lg font-semibold">SportGuard</span>
+            <span className="font-display text-lg font-semibold">PICKPIRE</span>
           </div>
           <h2 className="font-display text-2xl font-semibold">Sign in</h2>
-          <p className="text-sm text-muted-foreground mt-1">Access the SportGuard command center.</p>
+          <p className="text-sm text-muted-foreground mt-1">Access the PICKPIRE command center.</p>
 
           <form onSubmit={submit} className="mt-6 space-y-4">
             <Field icon={<Mail className="h-4 w-4" />} label="Email">

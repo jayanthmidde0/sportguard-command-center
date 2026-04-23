@@ -1,6 +1,6 @@
 import { GlassCard } from "@/components/sg/GlassCard";
 import { StatusBadge } from "@/components/sg/StatusBadge";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ScanSearch, FileVideo, X, Loader2, CheckCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { videosApi } from "@/lib/api";
@@ -8,6 +8,8 @@ import { toast } from "sonner";
 
 type Match = {
   id: string; title: string; platform: string;
+  detectedAt?: string;
+  suspectVideo?: string;
   video: number; audio: number; watermark: boolean;
   status: "SAFE" | "PIRATED" | "VERIFIED_PIRACY" | "REVIEW";
   score: number;
@@ -22,6 +24,17 @@ export default function DetectPage() {
   const [elapsedSec, setElapsedSec] = useState(0);
   const [inFlight, setInFlight] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const verdict = useMemo(() => {
+    if (!results.length) return null;
+    if (results.some((r) => r.status === "VERIFIED_PIRACY")) {
+      return { status: "VERIFIED_PIRACY" as const, message: "Pirated (watermark verified)" };
+    }
+    if (results.some((r) => r.status === "PIRATED")) {
+      return { status: "PIRATED" as const, message: "Pirated content detected" };
+    }
+    return { status: "SAFE" as const, message: "No piracy match detected" };
+  }, [results]);
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) setFile(f);
@@ -53,9 +66,11 @@ export default function DetectPage() {
         setProgress(100);
       }
       const matches: Match[] = ((res?.results ?? []) as any[]).map((m: any, index: number) => ({
-        id: `REF-${index + 1}`,
+        id: m?.detection_id ? `DET-${m.detection_id}` : `REF-${index + 1}`,
         title: m?.video || "Unknown reference",
         platform: "Reference Library",
+        detectedAt: m?.detected_at || undefined,
+        suspectVideo: m?.suspect_video_name || file.name,
         video: Math.round(Number(m?.video_similarity ?? 0)),
         audio: Math.round(Number(m?.audio_similarity ?? 0)),
         watermark: Boolean(m?.watermark_verified),
@@ -136,6 +151,14 @@ export default function DetectPage() {
 
           {results.length > 0 && (
             <div className="mt-6 space-y-3">
+              <div className="rounded-2xl border border-border/60 bg-surface-1/70 p-4 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs text-muted-foreground font-mono uppercase tracking-wider">Final verdict</div>
+                  <div className="font-display text-lg font-semibold">{verdict?.message}</div>
+                </div>
+                {verdict && <StatusBadge status={verdict.status} />}
+              </div>
+
               <h3 className="font-display text-lg font-semibold">Ranked matches</h3>
               {results.map((m, i) => (
                 <motion.div key={m.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }} className="rounded-2xl border border-border/60 bg-surface-1/70 p-4">
@@ -143,6 +166,8 @@ export default function DetectPage() {
                     <div>
                       <div className="font-semibold">{m.title}</div>
                       <div className="text-xs text-muted-foreground font-mono">{m.id} · {m.platform}</div>
+                      <div className="text-[11px] text-muted-foreground">Input: {m.suspectVideo || "-"}</div>
+                      {m.detectedAt && <div className="text-[11px] text-muted-foreground">Detected: {new Date(m.detectedAt).toLocaleString()}</div>}
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="font-mono text-sm">{(m.score * 100).toFixed(1)}%</span>

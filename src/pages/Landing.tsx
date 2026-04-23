@@ -14,7 +14,7 @@ export default function Landing() {
             <Shield className="h-5 w-5 text-white" />
           </div>
           <div>
-            <div className="font-display font-semibold">SportGuard</div>
+            <div className="font-display font-semibold">PICKPIRE</div>
             <div className="font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">v3.2 // live</div>
           </div>
         </Link>
@@ -36,7 +36,7 @@ export default function Landing() {
             Detect every <span className="grad-text">leak</span>.
           </h1>
           <p className="mt-6 mx-auto max-w-2xl text-lg text-secondary">
-            SportGuard fingerprints your live sports content and continuously hunts pirated copies across the open web — with video, audio and watermark verification in seconds.
+            PICKPIRE fingerprints your live sports content and continuously hunts pirated copies across the open web — with video, audio and watermark verification in seconds.
           </p>
           <div className="mt-9 flex items-center justify-center gap-3">
             <Link to="/register" className="group flex items-center gap-2 rounded-xl bg-grad-cyber px-5 py-3 text-sm font-semibold shadow-[0_0_30px_hsl(var(--primary)/0.5)] hover:shadow-[0_0_50px_hsl(var(--primary)/0.8)] transition-shadow">

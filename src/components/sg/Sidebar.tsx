@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Upload, ScanSearch, BarChart3, ShieldAlert,
-  Search, Radar, Settings, Shield, ChevronLeft, RadioTower
+  Search, Radar, Settings, Shield, ChevronLeft, RadioTower, FileBadge2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -14,6 +14,7 @@ const items = [
   { to: "/app/detect", label: "Detect Video", icon: ScanSearch },
   { to: "/app/detections", label: "Detections", icon: ShieldAlert },
   { to: "/app/analytics", label: "Analytics", icon: BarChart3 },
+  { to: "/app/proof", label: "Proof", icon: FileBadge2 },
   { to: "/app/search", label: "Manual Search", icon: Search },
   { to: "/app/monitoring", label: "Monitoring", icon: Radar },
   { to: "/app/settings", label: "Settings", icon: Settings },
@@ -49,7 +50,7 @@ export function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose:
               </div>
               {!collapsed && (
                 <div className="leading-tight">
-                  <div className="font-display font-semibold text-sm tracking-tight">SportGuard</div>
+                  <div className="font-display font-semibold text-sm tracking-tight">PICKPIRE</div>
                   <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground">v3.2 // live</div>
                 </div>
               )}

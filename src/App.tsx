@@ -17,6 +17,7 @@ import WatermarkPage from "./pages/Watermark";
 import DetectPage from "./pages/DetectPage";
 import Detections from "./pages/Detections";
 import Analytics from "./pages/Analytics";
+import Proof from "./pages/Proof";
 import ManualSearch from "./pages/ManualSearch";
 import Monitoring from "./pages/Monitoring";
 import Settings from "./pages/Settings";
@@ -43,6 +44,7 @@ const App = () => (
               <Route path="/app/detect" element={<DetectPage />} />
               <Route path="/app/detections" element={<Detections />} />
               <Route path="/app/analytics" element={<Analytics />} />
+              <Route path="/app/proof" element={<Proof />} />
               <Route path="/app/search" element={<ManualSearch />} />
               <Route path="/app/monitoring" element={<Monitoring />} />
               <Route path="/app/settings" element={<Settings />} />

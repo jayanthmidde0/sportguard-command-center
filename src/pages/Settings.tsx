@@ -48,7 +48,7 @@ export default function Settings() {
         <GlassCard className="p-6">
           <SectionTitle icon={<Webhook className="h-4 w-4" />} title="Webhook integration" />
           <Field label="Endpoint URL"><input value={webhook} onChange={e => setWebhook(e.target.value)} className="input font-mono" /></Field>
-          <p className="text-xs text-muted-foreground">SportGuard posts JSON events for every verified piracy detection.</p>
+          <p className="text-xs text-muted-foreground">PICKPIRE posts JSON events for every verified piracy detection.</p>
           <div className="mt-3 flex gap-2">
             <button onClick={() => toast.success("Test event sent")} className="rounded-xl border border-border/60 bg-surface-2/70 px-4 py-2 text-sm hover:bg-surface-3/70">Send test</button>
             <button onClick={() => toast.success("Webhook saved")} className="rounded-xl bg-grad-cyber px-4 py-2 text-sm font-semibold">Save</button>

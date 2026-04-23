@@ -1,7 +1,10 @@
 // Centralized API client for SportGuard FastAPI backend.
 // Change base URL in one place. Easy to swap for prod.
 
+const envApiBase = (import.meta as any)?.env?.VITE_API_BASE_URL;
+
 export const API_BASE_URL =
+  (typeof envApiBase === "string" && envApiBase.trim()) ||
   (typeof window !== "undefined" && (window as any).__SPORTGUARD_API__) ||
   "http://localhost:8000";
 
@@ -77,10 +80,29 @@ export const authApi = {
 };
 
 export const videosApi = {
-  uploadReference: (file: File, meta: { title?: string; description?: string }, onProgress?: (p: number) => void) =>
+  uploadReference: (file: File, meta: { title?: string; description?: string; keywords?: string; playback_mode?: string }, onProgress?: (p: number) => void) =>
     uploadWithProgress("/upload", file, meta, onProgress),
   detect: (file: File, meta: { title?: string }, onProgress?: (p: number) => void) =>
     uploadWithProgress("/detect", file, meta, onProgress),
+};
+
+export const linkScanApi = {
+  scan: (link: string) => api<any>("/scan-link", { method: "POST", body: JSON.stringify({ link }) }),
+};
+
+export const youtubeApi = {
+  scan: (payload: { query: string; min_keyword_matches?: number }) => {
+    const params = new URLSearchParams({ query: payload.query });
+    if (typeof payload.min_keyword_matches === "number") {
+      params.set("min_keyword_matches", String(payload.min_keyword_matches));
+    }
+    return api<any>(`/scan-youtube?${params.toString()}`);
+  },
+};
+
+export const telegramApi = {
+  scan: (channel?: string) =>
+    api<any>(`/scan-telegram${channel ? `?channel=${encodeURIComponent(channel)}` : ""}`),
 };
 
 export const watermarkApi = {
@@ -101,6 +123,29 @@ export const detectionsApi = {
   },
 };
 
+export const proofApi = {
+  report: (detectionId: string | number, kind: "pirated" | "original" = "pirated") =>
+    api<any>(`/proof/report/${detectionId}?kind=${kind}`),
+  downloadUrl: (detectionId: string | number, kind: "pirated" | "original" = "pirated") =>
+    `${API_BASE_URL}/proof/download/${detectionId}?kind=${kind}`,
+  download: async (detectionId: string | number, kind: "pirated" | "original" = "pirated") => {
+    const t = tokenStore.get();
+    const res = await fetch(`${API_BASE_URL}/proof/download/${detectionId}?kind=${kind}`, {
+      headers: {
+        Accept: "application/json",
+        ...(t ? { Authorization: `Bearer ${t}` } : {}),
+      },
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new ApiError(res.status, (body as any)?.detail || res.statusText || "Proof download failed", body);
+    }
+
+    return res.blob();
+  },
+};
+
 export const analyticsApi = {
   overview: () => api<any>("/analytics/overview"),
   timeline: () => api<any>("/analytics/timeline"),
@@ -110,7 +155,9 @@ export const analyticsApi = {
 };
 
 export const monitoringApi = {
-  status: () => analyticsApi.platforms(),
+  status: () => api<any>("/monitoring/status"),
+  control: (payload: { youtube_enabled?: boolean; telegram_enabled?: boolean }) =>
+    api<any>("/monitoring/control", { method: "POST", body: JSON.stringify(payload) }),
   events: async (limit = 50) => {
     const data = await api<{ events?: any[] }>(`/webhook/events?limit=${limit}`);
     return data?.events ?? [];

@@ -21,7 +21,7 @@ export default function Register() {
     setLoading(true);
     try {
       await register(email, password, name);
-      toast.success("Account created. Welcome to SportGuard.");
+      toast.success("Account created. Welcome to PICKPIRE.");
       nav("/app");
     } catch (err: any) {
       toast.error(err?.message || "Registration failed");
@@ -36,10 +36,10 @@ export default function Register() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="relative w-full max-w-md glass-strong rounded-3xl p-8">
         <div className="flex items-center gap-2 mb-6">
           <div className="h-10 w-10 rounded-xl bg-grad-cyber grid place-items-center"><Shield className="h-5 w-5" /></div>
-          <span className="font-display text-lg font-semibold">SportGuard</span>
+          <span className="font-display text-lg font-semibold">PICKPIRE</span>
         </div>
         <h2 className="font-display text-2xl font-semibold">Create operator account</h2>
-        <p className="text-sm text-muted-foreground mt-1">Join the SportGuard intelligence network.</p>
+        <p className="text-sm text-muted-foreground mt-1">Join the PICKPIRE intelligence network.</p>
 
         <form onSubmit={submit} className="mt-6 space-y-4">
           <Field icon={<User className="h-4 w-4" />} label="Full name">

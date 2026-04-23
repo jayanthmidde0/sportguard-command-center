@@ -1,47 +1,86 @@
 import { GlassCard } from "@/components/sg/GlassCard";
 import { useRef, useState } from "react";
-import { Upload, RadioTower, CheckCircle2, Loader2, FileVideo, X, ArrowRight } from "lucide-react";
+import { Upload, RadioTower, CheckCircle2, Loader2, FileVideo, Download, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { videosApi } from "@/lib/api";
 import { toast } from "sonner";
 
+type BroadcastItem = {
+  id: string;
+  file: File;
+  status: "queued" | "uploading" | "done" | "error";
+  progress: number;
+  result?: any;
+  error?: string;
+};
+
 export default function BroadcastPage() {
-  const [file, setFile] = useState<File | null>(null);
-  const [progress, setProgress] = useState(0);
-  const [stage, setStage] = useState<"idle" | "upload" | "watermark" | "save" | "done">("idle");
-  const [result, setResult] = useState<any>(null);
+  const [items, setItems] = useState<BroadcastItem[]>([]);
+  const [running, setRunning] = useState(false);
+  const [playbackMode, setPlaybackMode] = useState<"single" | "replay" | "multi">("single");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const run = async () => {
-    if (!file) return toast.error("Choose a broadcast source video first");
-    setStage("upload");
-    setProgress(0);
-    setResult(null);
+  const addFiles = (fileList?: FileList | null) => {
+    const selected = Array.from(fileList || []).filter((file) => file.type.startsWith("video/"));
+    if (!selected.length) return;
 
-    const t1 = setTimeout(() => setStage("watermark"), 1200);
-    const t2 = setTimeout(() => setStage("save"), 2600);
-
-    try {
-      const data = await videosApi.uploadReference(file, { title: file.name }, (p) => setProgress(p));
-      setStage("done");
-      setProgress(100);
-      setResult(data);
-      toast.success("Broadcast version ready with watermark");
-    } catch (e: any) {
-      setStage("idle");
-      setProgress(0);
-      toast.error(e?.message || "Broadcast preparation failed");
-    } finally {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    }
+    setItems((current) => [
+      ...current,
+      ...selected.map((file, index) => ({
+        id: `${file.name}-${file.size}-${file.lastModified}-${index}-${current.length}`,
+        file,
+        status: "queued" as const,
+        progress: 0,
+      })),
+    ]);
   };
+
+  const updateItem = (id: string, patch: Partial<BroadcastItem>) => {
+    setItems((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  };
+
+  const run = async () => {
+    if (!items.length) return toast.error("Choose one or more broadcast source videos first");
+
+    setRunning(true);
+
+    for (const item of items) {
+      updateItem(item.id, { status: "uploading", progress: 0, error: undefined });
+
+      try {
+        const data = await videosApi.uploadReference(
+          item.file,
+          { title: item.file.name, playback_mode: playbackMode },
+          (progress) => updateItem(item.id, { progress })
+        );
+
+        updateItem(item.id, {
+          status: "done",
+          progress: 100,
+          result: data,
+        });
+      } catch (e: any) {
+        const message = e?.message || "Broadcast preparation failed";
+        updateItem(item.id, {
+          status: "error",
+          error: message,
+        });
+        toast.error(`${item.file.name}: ${message}`);
+      }
+    }
+
+    setRunning(false);
+    toast.success("Broadcast queue processed");
+  };
+
+  const completedCount = items.filter((item) => item.status === "done").length;
+  const erroredCount = items.filter((item) => item.status === "error").length;
 
   return (
     <div className="space-y-6">
       <Header
         title="Broadcast Pipeline"
-        subtitle="Upload source video, embed robust DWT watermark, then broadcast only the protected version."
+        subtitle="Select one or more source videos, watermark each one, then download and broadcast the protected versions only."
       />
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -51,8 +90,7 @@ export default function BroadcastPage() {
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
-              const f = e.dataTransfer.files?.[0];
-              if (f) setFile(f);
+              addFiles(e.dataTransfer.files);
             }}
             className="min-h-[260px] rounded-2xl border-2 border-dashed border-border/70 bg-surface-1/50 p-8 grid place-items-center text-center cursor-pointer hover:border-primary/60 transition-colors"
           >
@@ -60,70 +98,105 @@ export default function BroadcastPage() {
               ref={inputRef}
               type="file"
               accept="video/*"
+              multiple
               hidden
-              onChange={(e) => e.target.files?.[0] && setFile(e.target.files[0])}
+              onChange={(e) => addFiles(e.target.files)}
             />
             <div>
               <div className="mx-auto h-14 w-14 rounded-2xl bg-grad-cyber grid place-items-center mb-4 shadow-[0_0_30px_hsl(var(--primary)/0.4)]">
                 <Upload className="h-6 w-6" />
               </div>
-              <h3 className="font-display text-lg font-semibold">Drop source video for broadcast</h3>
-              <p className="text-sm text-muted-foreground mt-1">We will embed DWT watermark and store the broadcast-safe asset.</p>
-              {file && (
-                <div className="mt-4 inline-flex items-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-4 py-2">
-                  <FileVideo className="h-4 w-4 text-primary" />
-                  <span className="text-sm">{file.name}</span>
-                  <button className="text-muted-foreground hover:text-danger" onClick={(e) => { e.stopPropagation(); setFile(null); }}>
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              )}
+              <h3 className="font-display text-lg font-semibold">Drop source videos for broadcast</h3>
+              <p className="text-sm text-muted-foreground mt-1">Each file is sent through the upload flow, watermarked, and returned as a downloadable protected copy.</p>
             </div>
           </div>
 
-          {stage !== "idle" && (
+          {items.length > 0 && (
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-6 space-y-3">
-              <Stage label="Upload video" active={stage === "upload"} done={["watermark", "save", "done"].includes(stage)} progress={progress} />
-              <Stage label="Embed watermark (DWT)" active={stage === "watermark"} done={["save", "done"].includes(stage)} />
-              <Stage label="Save + register" active={stage === "save"} done={stage === "done"} />
-            </motion.div>
-          )}
-
-          {result && (
-            <div className="mt-5 rounded-xl border border-success/30 bg-success/10 p-4">
-              <p className="text-sm font-medium text-success">Broadcast version is ready.</p>
-              <p className="text-xs text-muted-foreground mt-1">Broadcast this protected asset only.</p>
-              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs font-mono">
-                <MetaItem k="Method" v={result?.watermark?.method || "DWT-QIM"} />
-                <MetaItem k="Embedded frames" v={String(result?.watermark?.embedded_frames ?? "-")} />
-                <MetaItem k="Broadcast video" v={String(result?.broadcast_video ?? "-")} />
-                <MetaItem k="Embeddings" v={String(result?.embeddings_count ?? 0)} />
+              <div className="rounded-xl border border-border/60 bg-surface-1/60 p-3 flex items-center justify-between text-sm">
+                <span>{items.length} file{items.length === 1 ? "" : "s"} queued</span>
+                <div className="flex items-center gap-3 text-muted-foreground">
+                  <span>{completedCount} ready</span>
+                  <span>{erroredCount} failed</span>
+                </div>
               </div>
-            </div>
+
+              {items.map((item) => (
+                <BroadcastItemCard
+                  key={item.id}
+                  item={item}
+                  playbackMode={playbackMode}
+                  onRemove={() => setItems((current) => current.filter((currentItem) => currentItem.id !== item.id))}
+                />
+              ))}
+            </motion.div>
           )}
         </GlassCard>
 
         <GlassCard className="p-6">
           <h3 className="font-display text-lg font-semibold">Flow</h3>
           <div className="mt-4 space-y-3 text-sm">
-            <FlowStep text="Upload video" done={stage !== "idle"} />
+            <FlowStep text="Select one or more source videos" done={items.length > 0} />
             <ArrowLine />
-            <FlowStep text="Embed watermark (DWT)" done={["watermark", "save", "done"].includes(stage)} />
+            <FlowStep text="Upload each file through the reference flow" done={running || completedCount > 0} />
             <ArrowLine />
-            <FlowStep text="Save + register" done={["save", "done"].includes(stage)} />
+            <FlowStep text="Get the watermarked broadcast copy" done={completedCount > 0} />
             <ArrowLine />
             <div className="rounded-xl border border-primary/30 bg-primary/10 p-3 font-semibold">
-              🎥 Broadcast THIS version
+              Download and broadcast only the watermarked file
             </div>
+          </div>
+
+          <div className="mt-5 rounded-xl border border-border/60 bg-surface-1/60 p-3">
+            <label className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Playback mode</label>
+            <select
+              value={playbackMode}
+              onChange={(e) => setPlaybackMode(e.target.value as typeof playbackMode)}
+              className="mt-2 w-full rounded-lg border border-border/60 bg-surface-2/80 px-3 py-2 text-sm outline-none"
+            >
+              <option value="single">Single view</option>
+              <option value="replay">Replay allowed</option>
+              <option value="multi">Multi video view</option>
+            </select>
+            <p className="mt-2 text-xs text-muted-foreground">
+              The selected mode is attached to the upload request and shown with the broadcast result.
+            </p>
           </div>
 
           <button
             onClick={run}
-            disabled={!file || stage === "upload" || stage === "watermark" || stage === "save"}
+            disabled={!items.length || running}
             className="mt-6 w-full rounded-xl bg-grad-cyber px-4 py-3 text-sm font-semibold shadow-[0_0_24px_hsl(var(--primary)/0.4)] hover:shadow-[0_0_36px_hsl(var(--primary)/0.7)] transition-shadow disabled:opacity-50"
           >
-            {stage === "idle" || stage === "done" ? "Prepare Broadcast Version" : "Preparing..."}
+            {running ? "Preparing..." : "Prepare Broadcast Versions"}
           </button>
+
+          <button
+            onClick={() => setItems([])}
+            disabled={!items.length || running}
+            className="mt-3 w-full rounded-xl border border-border/60 bg-surface-1/70 px-4 py-3 text-sm font-semibold hover:border-primary/60 transition-colors disabled:opacity-50"
+          >
+            Clear queue
+          </button>
+
+          {playbackMode === "multi" && completedCount > 0 && (
+            <div className="mt-5 rounded-xl border border-info/30 bg-info/10 p-3">
+              <div className="text-xs font-mono uppercase tracking-wider text-info">Multi view preview</div>
+              <div className="mt-3 grid grid-cols-1 gap-3">
+                {items
+                  .filter((item) => item.status === "done" && item.result?.broadcast_download_url)
+                  .map((item) => (
+                    <video
+                      key={item.id}
+                      src={item.result.broadcast_download_url}
+                      controls
+                      playsInline
+                      className="w-full rounded-lg border border-border/60 bg-black"
+                    />
+                  ))}
+              </div>
+            </div>
+          )}
         </GlassCard>
       </div>
     </div>
@@ -135,6 +208,76 @@ function Header({ title, subtitle }: { title: string; subtitle: string }) {
     <div>
       <h1 className="font-display text-3xl font-semibold tracking-tight">{title}</h1>
       <p className="text-secondary mt-1">{subtitle}</p>
+    </div>
+  );
+}
+
+function BroadcastItemCard({ item, playbackMode, onRemove }: { item: BroadcastItem; playbackMode: "single" | "replay" | "multi"; onRemove: () => void }) {
+  const downloadUrl = item.result?.broadcast_download_url || item.result?.broadcast_video_url;
+
+  return (
+    <div className="rounded-xl border border-border/60 bg-surface-1/60 p-4 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex items-center gap-3">
+          <FileVideo className="h-5 w-5 text-primary shrink-0" />
+          <div className="min-w-0">
+            <p className="truncate font-medium">{item.file.name}</p>
+            <p className="text-xs text-muted-foreground font-mono">{(item.file.size / 1024 / 1024).toFixed(1)} MB</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {item.status === "done" && downloadUrl && (
+            <a
+              href={downloadUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-xs font-semibold text-success hover:bg-success/20 transition-colors"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Download
+            </a>
+          )}
+          <button onClick={onRemove} className="rounded-lg border border-border/60 bg-surface-1/70 p-2 text-muted-foreground hover:text-danger transition-colors">
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      <Stage
+        label={item.status === "done" ? "Broadcast ready" : item.status === "error" ? item.error || "Broadcast failed" : item.status === "uploading" ? "Uploading & watermarking" : "Queued"}
+        active={item.status === "uploading"}
+        done={item.status === "done"}
+        progress={item.status === "uploading" ? item.progress : undefined}
+      />
+
+      {item.status === "done" && (
+        <div className="rounded-lg border border-success/30 bg-success/10 p-3 text-sm">
+          <p className="font-medium text-success">Watermarked file ready for broadcast.</p>
+          <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs font-mono">
+            <MetaItem k="Method" v={item.result?.watermark?.method || "DWT-QIM"} />
+            <MetaItem k="Download" v={downloadUrl || "-"} />
+          </div>
+        </div>
+      )}
+
+      {item.status === "done" && downloadUrl && playbackMode !== "multi" && (
+        <div className="rounded-xl border border-border/60 bg-surface-1/60 p-3">
+          <div className="mb-2 flex items-center justify-between text-xs font-mono uppercase tracking-wider text-muted-foreground">
+            <span>Playback preview</span>
+            <span>{playbackMode === "single" ? "plays once" : "replay enabled"}</span>
+          </div>
+          <video
+            src={downloadUrl}
+            controls
+            autoPlay={playbackMode === "single"}
+            loop={playbackMode === "replay"}
+            muted={playbackMode === "single"}
+            playsInline
+            className="w-full rounded-lg border border-border/60 bg-black"
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -1,18 +1,42 @@
 import { GlassCard } from "@/components/sg/GlassCard";
 import { monitoringApi } from "@/lib/api";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Radar, Youtube, Send, Activity, ShieldAlert } from "lucide-react";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 
 export default function Monitoring() {
-  const statusQuery = useQuery({ queryKey: ["monitoring-status"], queryFn: monitoringApi.status, refetchInterval: 30000 });
+  const queryClient = useQueryClient();
+  const statusQuery = useQuery({ queryKey: ["monitoring-status"], queryFn: monitoringApi.status, refetchInterval: 10000 });
   const eventsQuery = useQuery({ queryKey: ["monitoring-events"], queryFn: () => monitoringApi.events(50), refetchInterval: 15000 });
+  const controlMutation = useMutation({
+    mutationFn: monitoringApi.control,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["monitoring-status"] });
+      toast.success("Monitoring settings updated");
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || "Failed to update monitoring settings");
+    },
+  });
 
-  const platformRows = statusQuery.data ?? [];
-  const youtubeHits = Number(platformRows.find((p: any) => String(p.platform || "").toLowerCase().includes("youtube"))?.count ?? 0);
-  const telegramHits = Number(platformRows.find((p: any) => String(p.platform || "").toLowerCase().includes("telegram"))?.count ?? 0);
-  const youtubeData = { active: true, scanned_24h: youtubeHits, hits: youtubeHits, latency_ms: 0 };
-  const telegramData = { active: true, scanned_24h: telegramHits, hits: telegramHits, latency_ms: 0 };
+  const status = statusQuery.data ?? {};
+  const youtubeData = {
+    active: Boolean(status?.youtube_enabled),
+    scanned_24h: 0,
+    hits: 0,
+    latency_ms: 0,
+    lastRun: status?.last_youtube_run,
+    error: status?.youtube_last_error,
+  };
+  const telegramData = {
+    active: Boolean(status?.telegram_enabled),
+    scanned_24h: 0,
+    hits: 0,
+    latency_ms: 0,
+    lastRun: status?.last_telegram_run,
+    error: status?.telegram_last_error,
+  };
   const alerts = (eventsQuery.data ?? []).slice(-12).reverse().map((a: any, idx: number) => ({
     id: `evt-${idx}`,
     at: formatAgo(a?.received_at),
@@ -24,13 +48,36 @@ export default function Monitoring() {
     <div className="space-y-6">
       <div>
         <h1 className="font-display text-3xl font-semibold tracking-tight">Monitoring</h1>
-        <p className="text-secondary mt-1">Live status of platform crawlers and webhook events.</p>
+        <p className="text-secondary mt-1">Live status of platform crawlers and webhook events. Toggle scanners to control API token usage.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Crawler name="YouTube scanner" icon={<Youtube className="h-5 w-5" />} accent="from-pink/30 to-pink/0" data={youtubeData} />
-        <Crawler name="Telegram scanner" icon={<Send className="h-5 w-5" />} accent="from-info/30 to-info/0" data={telegramData} />
+        <Crawler
+          name="YouTube scanner"
+          icon={<Youtube className="h-5 w-5" />}
+          accent="from-pink/30 to-pink/0"
+          data={youtubeData}
+          onToggle={() => controlMutation.mutate({ youtube_enabled: !youtubeData.active })}
+          busy={controlMutation.isPending}
+          quotaHint={`max ${Number(status?.youtube_max_queries ?? 1)} query/cycle, ${Number(status?.youtube_max_results_per_query ?? 3)} results/query`}
+        />
+        <Crawler
+          name="Telegram scanner"
+          icon={<Send className="h-5 w-5" />}
+          accent="from-info/30 to-info/0"
+          data={telegramData}
+          onToggle={() => controlMutation.mutate({ telegram_enabled: !telegramData.active })}
+          busy={controlMutation.isPending}
+          quotaHint={`max ${Number(status?.telegram_max_videos_per_channel ?? 1)} video/channel/cycle`}
+        />
       </div>
+
+      <GlassCard className="p-4 text-sm">
+        <div className="font-medium">Production-safe monitor profile</div>
+        <div className="text-muted-foreground mt-1">
+          Interval: {Number(status?.interval_seconds ?? 0)}s · YouTube queries: {(status?.youtube_queries ?? []).join(", ") || "none"} · Telegram channels: {(status?.telegram_channels ?? []).join(", ") || "none"}
+        </div>
+      </GlassCard>
 
       <GlassCard className="p-6">
         <div className="flex items-center justify-between mb-4">
@@ -66,7 +113,7 @@ export default function Monitoring() {
   );
 }
 
-function Crawler({ name, icon, accent, data }: { name: string; icon: React.ReactNode; accent: string; data: any }) {
+function Crawler({ name, icon, accent, data, onToggle, busy, quotaHint }: { name: string; icon: React.ReactNode; accent: string; data: any; onToggle: () => void; busy: boolean; quotaHint: string }) {
   return (
     <GlassCard className="relative overflow-hidden p-6">
       <div className={`absolute -top-20 -right-20 h-48 w-48 rounded-full bg-gradient-to-br blur-2xl opacity-60 ${accent}`} />
@@ -79,7 +126,18 @@ function Crawler({ name, icon, accent, data }: { name: string; icon: React.React
               <div className="text-[11px] font-mono uppercase tracking-wider text-success">● {data.active ? "active" : "offline"}</div>
             </div>
           </div>
-          <button className="rounded-lg border border-border/60 bg-surface-2/70 px-3 py-1.5 text-xs hover:bg-surface-3/70">Configure</button>
+          <button
+            onClick={onToggle}
+            disabled={busy}
+            className="rounded-lg border border-border/60 bg-surface-2/70 px-3 py-1.5 text-xs hover:bg-surface-3/70 disabled:opacity-50"
+          >
+            {data.active ? "Turn off" : "Turn on"}
+          </button>
+        </div>
+        <div className="mt-2 text-[11px] text-muted-foreground">{quotaHint}</div>
+        <div className="mt-1 text-[11px] text-muted-foreground">
+          Last run: {data.lastRun ? new Date(data.lastRun).toLocaleString() : "never"}
+          {data.error ? ` · Error: ${String(data.error).slice(0, 80)}` : ""}
         </div>
         <div className="mt-5 grid grid-cols-3 gap-3">
           <Stat icon={<Activity className="h-3.5 w-3.5" />} label="Scanned 24h" value={data.scanned_24h.toLocaleString()} />
