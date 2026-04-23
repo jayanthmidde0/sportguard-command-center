@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { ArrowRight, Shield, Activity, Radar, ScanSearch, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 import { AmbientBackground } from "@/components/sg/AmbientBackground";
+import { VercelBadge } from "@/components/sg/VercelBadge";
 
 export default function Landing() {
   return (
@@ -19,6 +20,7 @@ export default function Landing() {
           </div>
         </Link>
         <div className="flex items-center gap-3">
+          <VercelBadge />
           <Link to="/login" className="hidden sm:inline text-sm text-secondary hover:text-foreground transition-colors">Sign in</Link>
           <Link to="/register" className="rounded-xl bg-grad-cyber px-4 py-2 text-sm font-semibold shadow-[0_0_20px_hsl(var(--primary)/0.4)] hover:shadow-[0_0_30px_hsl(var(--primary)/0.7)] transition-shadow">
             Launch console
